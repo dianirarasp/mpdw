@@ -1,1 +1,9 @@
+---
+editor_options:
+  markdown:
+    wrap: 72
+---
 
+![](images/Foto Diani Raras Puspita.JPG)
+
+##Latihan MPDW Pertemuan 1 x = 3 print(x)
