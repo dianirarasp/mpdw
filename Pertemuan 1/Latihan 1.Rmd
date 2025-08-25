@@ -4,6 +4,6 @@ editor_options:
     wrap: 72
 ---
 
-![](images/Foto Diani Raras Puspita.JPG)
+![](images/Foto%20Diani%20Raras%20Puspita.JPG)
 
-##Latihan MPDW Pertemuan 1 x = 3 print(x)
+##Latihan MPDW Pertemuan 1 x = 3 print(x) x = 3 print(x)
