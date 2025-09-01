@@ -1,1 +1,279 @@
+library(rio)
 
+data3 <- import("https://raw.githubusercontent.com/dianirarasp/mpdw/d730504ef4e7102d67b956a3103afb9883414502/Perrtemuan%202/Data%20TAVG%20376-500%20Diani%20Raras%20Puspita%20MPDW.xlsx")
+
+data3.ts <- ts(data3[,2], frequency = 1)
+
+# Membagi data: 100 training, 25 testing
+training <- data3[1:100, 2]
+testing  <- data3[101:125, 2]
+
+# Time series harian (tanpa musiman, frequency = 1)
+training.ts <- ts(training, frequency = 1)
+testing.ts  <- ts(testing, frequency = 1)
+
+# Plot semua data
+plot(data3.ts, col="red", main="Plot semua data")
+points(data3.ts)
+
+# Plot training
+plot(training.ts, col="blue", main="Plot data latih")
+points(training.ts)
+
+# Plot testing
+plot(testing.ts, col="green", main="Plot data uji")
+points(testing.ts)
+
+library(ggplot2)
+
+# Buat kolom Periode untuk setiap subset
+training_df <- data.frame(
+  Periode = 1:length(training),
+  Yt = training
+)
+
+testing_df <- data.frame(
+  Periode = (length(training)+1):(length(training)+length(testing)),
+  Yt = testing
+)
+
+# Plot gabungan dengan ggplot2
+ggplot() + 
+  geom_line(data = training_df, aes(x = Periode, y = Yt, col = "Data Latih")) +
+  geom_line(data = testing_df, aes(x = Periode, y = Yt, col = "Data Uji")) +
+  labs(x = "Periode Waktu", y = "Nilai", color = "Legend") +
+  scale_colour_manual(name="Keterangan:",
+                      breaks = c("Data Latih", "Data Uji"),
+                      values = c("blue", "green")) + 
+  theme_bw() + 
+  theme(legend.position = "bottom",
+        plot.caption = element_text(hjust=0.5, size=12))
+
+library(forecast)
+
+# SES dengan alpha = 0.2
+ses.1 <- ses(training.ts, h = length(testing.ts), alpha = 0.2)
+plot(ses.1, main="SES alpha=0.2")
+ses.1
+
+# SES dengan alpha = 0.7
+ses.2 <- ses(training.ts, h = length(testing.ts), alpha = 0.7)
+plot(ses.2, main="SES alpha=0.7")
+ses.2
+
+library(forecast)
+library(ggplot2)
+
+autoplot(ses.1) + 
+  autolayer(fitted(ses.1), series = "Fitted") +
+  ylab("Nilai") + 
+  xlab("Periode") +
+  ggtitle("Single Exponential Smoothing (SES) alpha=0.2") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+
+autoplot(ses.2) + 
+  autolayer(fitted(ses.2), series = "Fitted") +
+  ylab("Nilai") + 
+  xlab("Periode") +
+  ggtitle("Single Exponential Smoothing (SES) alpha=0.7") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+library(forecast)
+
+# SES dengan HoltWinters, alpha = 0.2
+ses1 <- HoltWinters(training.ts, alpha = 0.2, beta = FALSE, gamma = FALSE)
+plot(ses1, main = "HoltWinters SES alpha=0.2")
+
+# Forecast
+ramalan1 <- forecast(ses1, h = length(testing.ts))
+ramalan1
+plot(ramalan1, main = "Forecast SES alpha=0.2")
+
+# SES dengan HoltWinters, alpha = 0.7
+ses2 <- HoltWinters(training.ts, alpha = 0.7, beta = FALSE, gamma = FALSE)
+plot(ses2, main = "HoltWinters SES alpha=0.7")
+
+# Forecast
+ramalan2 <- forecast(ses2, h = length(testing.ts))
+ramalan2
+plot(ramalan2, main = "Forecast SES alpha=0.7")
+
+library(forecast)
+
+# SES dengan alpha optimum
+ses.opt <- ses(training.ts, h = length(testing.ts), alpha = NULL)
+plot(ses.opt, main="SES dengan Alpha Optimum")
+ses.opt
+
+# HoltWinters dengan alpha optimum (tanpa trend & seasonality)
+HWopt <- HoltWinters(training.ts, gamma = FALSE, beta = FALSE, alpha = NULL)
+HWopt
+plot(HWopt, main="HoltWinters SES dengan Alpha Optimum")
+
+# Ramalan dengan HoltWinters alpha optimum
+ramalanopt <- forecast(HWopt, h = length(testing.ts))
+ramalanopt
+plot(ramalanopt, main="Forecast SES HoltWinters Alpha Optimum")
+
+# Keakuratan Metode pada data training
+
+# SES alpha = 0.2
+SSE1 <- ses1$SSE
+MSE1 <- ses1$SSE / length(training.ts)
+RMSE1 <- sqrt(MSE1)
+
+akurasi1 <- matrix(c(SSE1, MSE1, RMSE1), nrow = 3, ncol = 1)
+row.names(akurasi1) <- c("SSE", "MSE", "RMSE")
+colnames(akurasi1) <- c("Akurasi alpha=0.2")
+akurasi1
+
+# SES alpha = 0.7
+SSE2 <- ses2$SSE
+MSE2 <- ses2$SSE / length(training.ts)
+RMSE2 <- sqrt(MSE2)
+
+akurasi2 <- matrix(c(SSE2, MSE2, RMSE2), nrow = 3, ncol = 1)
+row.names(akurasi2) <- c("SSE", "MSE", "RMSE")
+colnames(akurasi2) <- c("Akurasi alpha=0.7")
+akurasi2
+
+# Cara Manual SES HoltWinters
+
+# Alpha = 0.2
+fitted1 <- ramalan1$fitted
+residuals1 <- ramalan1$residuals
+head(residuals1)
+
+resid1 <- training.ts - fitted1
+head(resid1)
+
+SSE.1 <- sum(residuals1[2:length(training.ts)]^2)
+SSE.1
+
+MSE.1 <- SSE.1 / length(training.ts)
+MSE.1
+
+MAPE.1 <- sum(abs(residuals1[2:length(training.ts)] / training.ts[2:length(training.ts)]) * 100) / length(training.ts)
+MAPE.1
+
+akurasi.1 <- matrix(c(SSE.1, MSE.1, MAPE.1), nrow = 3)
+row.names(akurasi.1) <- c("SSE", "MSE", "MAPE")
+colnames(akurasi.1) <- c("Akurasi alpha=0.2")
+akurasi.1
+
+# Alpha = 0.7
+fitted2 <- ramalan2$fitted
+residuals2 <- ramalan2$residuals
+head(residuals2)
+
+resid2 <- training.ts - fitted2
+head(resid2)
+
+SSE.2 <- sum(residuals2[2:length(training.ts)]^2)
+SSE.2
+
+MSE.2 <- SSE.2 / length(training.ts)
+MSE.2
+
+MAPE.2 <- sum(abs(residuals2[2:length(training.ts)] / training.ts[2:length(training.ts)]) * 100) / length(training.ts)
+MAPE.2
+
+akurasi.2 <- matrix(c(SSE.2, MSE.2, MAPE.2), nrow = 3)
+row.names(akurasi.2) <- c("SSE", "MSE", "MAPE")
+colnames(akurasi.2) <- c("Akurasi alpha=0.7")
+akurasi.2
+
+# Jumlah observasi testing
+n_test <- length(testing.ts)
+
+# Error (forecast - aktual)
+e1   <- as.numeric(ramalan1$mean)[1:n_test] - as.numeric(testing.ts)
+e2   <- as.numeric(ramalan2$mean)[1:n_test] - as.numeric(testing.ts)
+eopt <- as.numeric(ramalanopt$mean)[1:n_test] - as.numeric(testing.ts)
+
+# SSE / MSE / RMSE untuk masing-masing model (abaikan NA)
+SSEtesting1  <- sum(e1^2,  na.rm = TRUE)
+MSEtesting1  <- mean(e1^2, na.rm = TRUE)
+RMSEtesting1 <- sqrt(MSEtesting1)
+
+SSEtesting2  <- sum(e2^2,  na.rm = TRUE)
+MSEtesting2  <- mean(e2^2, na.rm = TRUE)
+RMSEtesting2 <- sqrt(MSEtesting2)
+
+SSEtestingopt  <- sum(eopt^2,  na.rm = TRUE)
+MSEtestingopt  <- mean(eopt^2, na.rm = TRUE)
+RMSEtestingopt <- sqrt(MSEtestingopt)
+
+# Tabel ringkas
+akurasitesting_SSE <- matrix(c(SSEtesting1, SSEtesting2, SSEtestingopt),
+                             nrow = 3,
+                             dimnames = list(c("SSE alpha=0.2","SSE alpha=0.7","SSE alpha optimum"), "Nilai"))
+akurasitesting_MSE <- matrix(c(MSEtesting1, MSEtesting2, MSEtestingopt),
+                             nrow = 3,
+                             dimnames = list(c("MSE alpha=0.2","MSE alpha=0.7","MSE alpha optimum"), "Nilai"))
+akurasitesting_RMSE <- matrix(c(RMSEtesting1, RMSEtesting2, RMSEtestingopt),
+                              nrow = 3,
+                              dimnames = list(c("RMSE alpha=0.2","RMSE alpha=0.7","RMSE alpha optimum"), "Nilai"))
+
+akurasitesting_SSE
+akurasitesting_MSE
+akurasitesting_RMSE
+
+library(forecast)
+
+testing_ts <- ts(testing, start = length(training.ts) + 1, frequency = 1)
+
+# Sekarang hitung akurasi
+accuracy(ramalan1, testing_ts)
+accuracy(ramalan2, testing_ts)
+accuracy(ramalanopt, testing_ts)
+
+library(ggplot2)
+library(forecast)
+
+# Buat data frame untuk plotting
+df_train <- data.frame(Periode = 1:length(training.ts),
+                       Nilai = as.numeric(training.ts),
+                       Tipe = "Training")
+df_test <- data.frame(Periode = (length(training.ts)+1):(length(training.ts)+length(testing.ts)),
+                      Nilai = as.numeric(testing.ts),
+                      Tipe = "Testing")
+
+# Forecast alpha=0.2
+df_forecast02 <- data.frame(Periode = (length(training.ts)+1):(length(training.ts)+length(testing.ts)),
+                            Nilai = as.numeric(ramalan1$mean),
+                            Tipe = "Forecast alpha=0.2")
+
+# Forecast alpha=0.7
+df_forecast07 <- data.frame(Periode = (length(training.ts)+1):(length(training.ts)+length(testing.ts)),
+                            Nilai = as.numeric(ramalan2$mean),
+                            Tipe = "Forecast alpha=0.7")
+
+# Forecast alpha optimum
+df_forecast_opt <- data.frame(Periode = (length(training.ts)+1):(length(training.ts)+length(testing.ts)),
+                              Nilai = as.numeric(ramalanopt$mean),
+                              Tipe = "Forecast alpha optimum")
+
+# Gabungkan semua
+df_all <- rbind(df_train, df_test, df_forecast02, df_forecast07, df_forecast_opt)
+
+# Plot
+ggplot(df_all, aes(x = Periode, y = Nilai, color = Tipe)) +
+  geom_line(size=1) +
+  labs(title = "Forecast SES: Training, Testing, dan Alpha Terpilih",
+       x = "Periode",
+       y = "Nilai") +
+  scale_color_manual(values = c("Training"="blue",
+                                "Testing"="green",
+                                "Forecast alpha=0.2"="orange",
+                                "Forecast alpha=0.7"="red",
+                                "Forecast alpha optimum"="purple")) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+cat("Kesimpulan: Hasil pemulusan data menunjukkan bahwa metode single exponential smoothing dengan alpha optimum memberikan performa paling baik dibandingkan alpha fixed (0.2 maupun 0.7). 
+Nilai alpha 0.2 masih cukup baik namun cenderung lambat dalam merespon perubahan, sedangkan alpha 0.7 terlalu responsif sehingga menghasilkan error yang lebih besar. 
+Dengan nilai MAPE di bawah 5%, model pemulusan ini termasuk dalam kategori highly accurate forecast, yang berarti hasil peramalan dapat dipercaya karena tingkat kesalahannya sangat rendah.")
