@@ -1,0 +1,612 @@
+---
+title: "Tugas Praktikum 3.2"
+outhor: DIANI RARAS PUSPITA
+output: html_document
+date: "2025-09-18"
+---
+
+##PACKAGES
+
+```{r}
+#install.packages("dLagM") a
+#install.packages("dynlm") 
+#install.packages("MLmetrics") 
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+```
+
+```{r}
+library(lmtest)
+library(car)
+```
+## DATA
+```{r}
+# Langkah 1: Baca / Buat Data
+library(tibble)
+ data_aqi <- tribble(
+   ~AQI, ~SO2,
+   30.2, 0.3874302,
+   28.2, 0.40978193,
+   26.6, 0.40233135,
+   25, 0.37625432,
+   26, 0.33900142,
+   26, 0.31292439,
+   26, 0.31292439,
+   24, 0.3427267,
+   23, 0.39488077,
+   24, 0.42840838,
+   25, 0.42840838,
+   26, 0.39860606,
+   27, 0.3501773,
+   29, 0.31664968,
+   29, 0.29802322,
+   29, 0.28684735,
+   29, 0.28312206,
+   28, 0.29429793,
+   27, 0.3017485,
+   27, 0.3054738,
+   27, 0.3091991,
+   27, 0.31292439,
+   27, 0.32037497,
+   27, 0.32410026,
+   27, 0.32782555,
+   28, 0.32782555,
+   29, 0.32037497,
+   31, 0.31664968,
+   31, 0.31292439,
+   32, 0.31664968,
+   32, 0.31664968,
+   31, 0.31664968,
+   31, 0.32037497,
+   30, 0.32037497,
+   30, 0.32410026,
+   29, 0.32782555,
+   27, 0.33900142,
+   26, 0.3501773,
+   25, 0.35762787,
+   25, 0.36507845,
+   24, 0.37252903,
+   24, 0.37625432,
+   25, 0.37625432,
+   25, 0.37252903,
+   25, 0.37252903,
+   26, 0.37252903,
+   26, 0.3799796,
+   27, 0.39115548,
+   27, 0.39860606,
+   27, 0.39860606,
+   27, 0.3874302,
+   28, 0.37625432,
+   28, 0.36507845,
+   27, 0.36880374,
+   27, 0.37625432,
+   26, 0.3837049,
+   25, 0.40233135,
+   23, 0.42840838,
+   22, 0.44330955,
+   21, 0.45448542,
+   20, 0.45448542,
+   19, 0.45076013,
+   19, 0.43958426,
+   20, 0.4209578,
+   21, 0.40978193,
+   21, 0.40605664,
+   21, 0.39860606,
+   22, 0.39115548,
+   24, 0.3837049,
+   26, 0.37625432,
+   27, 0.37252903,
+   28, 0.36880374
+ )
+# Cek data
+ head(data_aqi)
+```
+
+## PEMBAGIAN DATA
+```{r}
+# Langkah 2: Split Data (Training & Testing)
+# 28 baris data → 80% (≈22) buat training, sisanya (6) buat testing
+train <- data_aqi[1:22, ]   # 22 baris pertama untuk training
+test  <- data_aqi[23:28, ]  # 6 baris terakhir untuk testing
+
+# Cek hasil split
+nrow(train)
+nrow(test) 
+```
+```{r}
+# Langkah 3: Buat Data Time Series
+# Asumsinya data berurutan (baris = waktu)
+train.ts <- ts(train)
+test.ts  <- ts(test)
+data.ts  <- ts(data_aqi)
+```
+
+```{r}
+# Cek time series train
+ train.ts
+```
+
+##MODEL KOYCK
+### Pemodelan
+```{r}
+# Langkah 4: Model Koyck
+ library(dLagM)
+# Bangun model Koyck: AQI (Y) ~ SO2 (X)
+ model.koyck <- koyckDlm(x = train$SO2, y = train$AQI)
+# Lihat hasil model
+ summary(model.koyck)
+```
+
+
+```{r}
+ # Lihat AIC & BIC untuk mengecek kebaikan model
+AIC(model.koyck)
+BIC(model.koyck)
+```
+Dari hasil tersebut, didapat bahwa peubah $Y_{t-1}$ memiliki nilai P-Value < 0.05, 
+sedangkan peubah $X_t$ memiliki nilai P-Value > 0.05. 
+Hal ini menunjukkan bahwa hanya peubah $Y_{t-1}$ yang berpengaruh signifikan terhadap $Y$ (AQI), 
+sedangkan peubah $X_t$ (SO2) tidak berpengaruh signifikan.
+
+Adapun model keseluruhannya adalah sebagai berikut:
+
+$${Y}_t = 6.7602 - 0.3004X_t + 0.7456Y_{t-1}$$
+
+### Peramalan dan Akurasi
+```{r}
+## Langkah 5: Peramalan dan Akurasi Model Koyck
+# Peramalan 5 periode ke depan menggunakan model Koyck
+ fore.koyck <- forecast(model = model.koyck, x = test$SO2, h = 5)
+
+# Tampilkan hasil peramalan
+fore.koyck
+```
+```{r}
+# Langkah 6: Menghitung MAPE Model Koyck (dengan penyesuaian panjang data)
+mape.koyck <- MAPE(fore.koyck$forecasts, test$AQI[1:5])
+mape.koyck
+```
+
+```{r}
+# Langkah 7: Akurasi Data Training
+ GoF(model.koyck)
+```
+
+
+## Regression with Distributed Lag
+### Pemodelan (Lag=2)
+```{r}
+# Langkah 8: Regression with Distributed Lag (Lag = 2)
+# Bangun model DLM dengan lag = 2
+model.dlm <- dlm(x = train$SO2, y = train$AQI, q = 2)
+ 
+# Lihat hasil model
+summary(model.dlm)
+```
+
+Call:
+lm(formula = model.formula, data = design)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-1.3508 -0.6755 -0.1901  0.7274  1.8083 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)    37.89       2.55  14.857 8.82e-11 ***
+x.t           -80.85      20.37  -3.970   0.0011 ** 
+x.1            80.12      33.05   2.424   0.0276 *  
+x.2           -33.00      19.36  -1.704   0.1077    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 1.014 on 16 degrees of freedom
+Multiple R-squared:  0.7202,	Adjusted R-squared:  0.6677 
+F-statistic: 13.73 on 3 and 16 DF,  p-value: 0.0001088
+
+AIC and BIC values for the model:
+
+```{r}
+# Langkah 9: Mengecek AIC dan BIC Model DLM
+AIC(model.dlm)
+BIC(model.dlm)
+```
+Dari hasil di atas, didapat bahwa p-value dari Intercept dan X_{t-1} < 0.05.
+Hal ini menunjukkan bahwa Intercept dan X_{t-1} berpengaruh signifikan terhadap $Y_t$ (AQI),
+sedangkan X_{t}$ dan X_{t-2}$ tidak signifikan.
+
+Adapun model keseluruhan yang terbentuk adalah sebagai berikut:
+$$
+Ŷₜ = -9.6779 + 0.3179Xₜ + 1.5276Xₜ₋₁ + 0.2651Xₜ₋₂
+$$
+Nilai AIC yang dihasilkan adalah 62.83 dan BIC sebesar 67.81, 
+yang menunjukkan bahwa model ini memiliki kecocokan yang cukup baik terhadap data.
+
+### Peramalan dan Akurasi
+```{r}
+# Langkah 10: Peramalan 5 Periode ke Depan dengan Model DLM
+# Peramalan Y (AQI) untuk 5 periode ke depan
+fore.dlm <- forecast(model = model.dlm, x = test$SO2, h = 5)
+
+# Tampilkan hasil peramalan
+fore.dlm
+```
+```{r}
+# Langkah 11: Menghitung MAPE Model DLM
+mape.dlm <- MAPE(fore.dlm$forecasts, test$AQI[1:5])
+mape.dlm
+```
+
+```{r}
+# Langkah 12: Akurasi Data Training untuk Model DLM
+GoF(model.dlm)
+```
+### Lag Optimum
+```{r}
+# Langkah 13: Penentuan Lag Optimum
+train.df <- as.data.frame(train)
+str(train.df)
+```
+```{r}
+ # FiniteDLMauto
+finiteDLMauto(
+   formula = AQI ~ SO2,
+   data = train.df,
+   q.min = 1,
+   q.max = 10,
+   model.type = "dlm",
+   error.type = "AIC",
+   trace = TRUE
+ )
+```
+
+## Model Autoregressive
+### Pemodelan
+```{r}
+# Langkah 14: Model DLM dengan lag optimum (q = 6)
+# Membuat vektor untuk input dan output
+x_train <- train$SO2  # variabel input
+y_train <- train$AQI  # variabel output
+ 
+ # Membuat model DLM dengan lag optimum
+ model.dlm2 <- dlm(x = x_train, y = y_train, q = 6)
+ 
+ # Melihat ringkasan model
+ summary(model.dlm2)
+```
+
+```{r}
+# Langkah 15: Menghitung AIC dan BIC model DLM
+AIC(model.dlm2)
+BIC(model.dlm2)
+```
+Berdasarkan pemodelan DLM dengan lag optimum $q = 6$, diperoleh model prediksi AQI sebagai berikut:
+
+$$
+\hat{Y}_t = 34.952 - 98.545 X_t + 95.851 X_{t-1} - 18.792 X_{t-2} - 3.426 X_{t-3} - 33.718 X_{t-4} + 45.909 X_{t-5} - 12.243 X_{t-6}
+$$
+
+Dimana $\hat{Y}_t$ adalah nilai prediksi AQI pada waktu $t$ dan $X_t$ adalah variabel SO2 pada waktu $t$.  
+
+Nilai AIC = 46.37646 dan BIC = 53.32976 menunjukkan model ini cukup baik untuk digunakan.  
+Koefisien menunjukkan bahwa lag tertentu (misal $X_{t-1}$, $X_{t-5}$) memiliki pengaruh yang lebih besar terhadap AQI dibanding lag lainnya.
+
+
+### Peramalan dan Akurasi
+```{r}
+# Langkah 16 : Peramalan 5 periode ke depan menggunakan model DLM
+fore.dlm2 <- forecast(model = model.dlm2, x=test$SO2, h=5)
+ 
+# Ambil nilai aktual dari data test (AQI)
+ y_true <- tail(test$AQI, 5)
+ 
+ # Hitung MAPE
+ mape.dlm2 <- MAPE(fore.dlm2$forecasts, y_true)
+ mape.dlm2
+```
+
+```{r}
+# Langkah 16 : # Akurasi data training
+ GoF(model.dlm2)
+```
+
+
+## Pemodelan DLM & ARDL dengan Library dynlm
+
+```{r}
+# Langkah 17: Pemodelan Autoregressive Distributed Lag (ARDL)
+ library(dLagM)
+ 
+ # Membuat model ARDL dengan lag 1 untuk Y (AQI) dan lag 1 untuk X (SO2)
+ model.ardl <- ardlDlm(x = train$SO2, y = train$AQI, p = 1, q = 1)
+ 
+ # Melihat ringkasan model ARDL
+ summary(model.ardl)
+```
+
+```{r}
+# Langkah 18: Menghitung AIC dan BIC untuk model ARDL
+ AIC(model.ardl)
+ BIC(model.ardl)
+```
+# Kesimpulan Model Regresi Deret Waktu
+
+Berdasarkan hasil regresi deret waktu, model menunjukkan bahwa peubah \(X_{t}\), lag dari peubah \(X\) yaitu \(X_{t-1}\), dan lag dari peubah \(Y\) yaitu \(Y_{t-1}\) berpengaruh signifikan terhadap \(Y_t\) dengan nilai p < 0,05. Hal ini menandakan bahwa baik nilai saat ini maupun lag dari peubah \(X\) dan lag dari peubah \(Y\) berperan dalam memengaruhi \(Y_t\).
+
+Persamaan modelnya adalah sebagai berikut:
+
+$$
+\hat{Y}_t = 11.4566 - 27.7805 X_t + 21.7484 X_{t-1} + 0.6407 Y_{t-1}
+$$
+
+Nilai AIC sebesar 56.91 dan BIC sebesar 62.13 menunjukkan model ini memiliki keseimbangan yang baik antara kesesuaian dan kompleksitas.  
+
+Koefisien determinasi \(R^2 = 0.813\) dan adjusted \(R^2 = 0.78\) menandakan bahwa model mampu menjelaskan sekitar 78–81\% variasi data. Residual standard error sebesar 0.8217 mengindikasikan kesalahan prediksi relatif kecil.  
+
+Secara keseluruhan, model ini dapat dianggap cukup baik dan signifikan secara statistik (F-statistic = 24.64; p-value = 2.022e-06).
+
+```{r}
+ #Langkah 19: Peramalan dan Akurasi Model ARDL
+
+ # Koefisien ARDL
+ b0 <- 11.4566
+ b1 <- -27.7805
+ b2 <- 21.7484
+ b3 <- 0.6407
+ 
+ # Data test
+ x_t <- test$SO2
+ y_t1 <- c(tail(train$AQI,1), head(test$AQI,-1))  # lag Y
+ x_t1 <- c(tail(train$SO2,1), head(test$SO2,-1))  # lag X
+ 
+ # Forecast 5 periode ke depan
+ fore.ardl <- b0 + b1*x_t + b2*x_t1 + b3*y_t1
+ 
+ # Tampilkan hasil forecast
+ fore.ardl
+```
+```{r}
+# Nilai aktual dari test set
+ y_true <- test$AQI
+```
+
+```{r}
+# Langkah 19: Akurasi Model ARDL
+# Nilai aktual dari test set
+ y_true <- test$AQI
+ 
+ # Hitung MAPE manual
+ mape.ardl <- mean(abs((y_true - fore.ardl)/y_true)) * 100
+ mape.ardl
+```
+```{r}
+# Langkah 20 : akurasi data training
+ GoF(model.ardl)
+```
+
+```{r}
+library(dLagM)
+ 
+ # Penentuan lag optimum berdasarkan AIC
+ model.ardl.opt <- ardlBoundOrders(
+   data = data.frame(data_aqi),  # dataset
+   ic = "AIC",                   # kriteria informasi
+   formula = AQI ~ SO2           # formula Y ~ X
+ )
+ 
+ # Tampilkan hasil lag optimum
+  model.ardl.opt
+```
+
+```{r}
+# Inisialisasi vektor untuk menyimpan nilai minimum AIC tiap q
+ min_p <- c()
+ 
+# Hitung minimum AIC tiap q (lag Y)
+ for(i in 1:length(model.ardl.opt$Stat.table)) {
+   min_p[i] <- min(model.ardl.opt$Stat.table[[i]], na.rm = TRUE)
+ }
+ 
+ # Tentukan q optimum (lag Y)
+ q_opt <- which(min_p == min(min_p, na.rm = TRUE))
+ 
+ # Tentukan p optimum (lag X) untuk q optimum
+ p_opt <- which(model.ardl.opt$Stat.table[[q_opt]] == 
+                min(model.ardl.opt$Stat.table[[q_opt]], na.rm = TRUE))
+ 
+ # Buat data.frame ringkas hasil
+ data.frame(
+   "q_optimum" = q_opt,
+   "p_optimum" = p_opt,
+   "AIC" = model.ardl.opt$min.Stat
+ )
+```
+
+```{r}
+# Langkah 22: Menampilkan ringkasan model linear
+ library(dynlm)
+ 
+ # DLM q=1
+ cons_lm1 <- dynlm(AQI ~ SO2 + L(SO2), data = train.ts)
+ 
+ # ARDL p=1 q=0
+ cons_lm2 <- dynlm(AQI ~ SO2 + L(AQI), data = train.ts)
+ 
+ # ARDL p=1 q=1
+ cons_lm3 <- dynlm(AQI ~ SO2 + L(SO2) + L(AQI), data = train.ts)
+ 
+ # DLM p=2
+ cons_lm4 <- dynlm(AQI ~ SO2 + L(SO2) + L(SO2, 2), data = train.ts)
+ 
+ # Ringkasan model DLM & ARDL
+ summary(cons_lm1)  # DLM q=1
+```
+### Ringkasan Model
+```{r}
+ summary(cons_lm2)  # ARDL p=1 q=0
+```
+
+```{r}
+ summary(cons_lm3)  # ARDL p=1 q=1
+```
+
+```{r}
+ summary(cons_lm4)  # DLM p=2
+```
+
+```{r} 
+library(broom)
+ 
+ model_list <- list(cons_lm1, cons_lm2, cons_lm3, cons_lm4)
+ model_names <- c("DLM q=1", "ARDL p=1 q=0", "ARDL p=1 q=1", "DLM p=2")
+ 
+ model_summary <- lapply(model_list, function(x) {
+   tidy(x)  # Ambil koefisien
+ })
+```
+
+```{r}
+names(model_summary) <- model_names
+ 
+ # Lihat ringkasan koefisien
+ model_summary
+```
+### SSE
+```{r}
+# Menghitung SSE untuk masing-masing model
+ sse_lm1 <- deviance(cons_lm1)  # DLM q=1
+ sse_lm2 <- deviance(cons_lm2)  # ARDL p=1 q=0
+ sse_lm3 <- deviance(cons_lm3)  # ARDL p=1 q=1
+ sse_lm4 <- deviance(cons_lm4)  # DLM p=2
+ 
+ # Menampilkan hasil
+ sse_lm1
+ sse_lm2
+ sse_lm3
+ sse_lm4
+```
+### Ui encomptest
+```{r}
+ if(!require(lmtest)) install.packages("lmtest")
+ library(lmtest)
+ 
+ # Uji perbandingan model
+ encomptest(cons_lm1, cons_lm2)
+```
+
+Berdasarkan hasil encompassing test terhadap model DLM & ARDL:
+
+- **Model 1 (AQI ~ SO2 + L(SO2))**  
+  p-value = 2.675e-05 (< 0.01).  
+  Artinya, penambahan lag dari Y (L(AQI)) memberikan peningkatan signifikan terhadap model. Dengan demikian, Model 1 **belum memadai** tanpa tambahan lag dari Yt.
+
+- **Model 2 (AQI ~ SO2 + L(AQI))**  
+  p-value = 0.009803 (< 0.01).  
+  Artinya, penambahan lag dari X (L(SO2)) memberikan peningkatan signifikan. Sehingga Model 2 **tidak cukup memadai** tanpa tambahan lag dari Xt.
+
+- **Model E (AQI ~ SO2 + L(SO2) + L(AQI))**  
+  Merupakan model gabungan yang sudah mempertimbangkan lag dari kedua variabel, sehingga menjadi model yang lebih lengkap dan memadai untuk menjelaskan variabilitas AQI.
+
+
+### Uji Autokorelasi Residual
+```{r}
+dwtest(cons_lm1)
+dwtest(cons_lm2)
+dwtest(cons_lm3)
+dwtest(cons_lm4)
+```
+Berdasarkan hasil uji Durbin-Watson, semua model menunjukkan **autokorelasi positif** pada residualnya (DW < 2).  
+- Model 1: DW = 0.55857, autokorelasi sangat kuat.  
+- Model 2: DW = 0.94967, autokorelasi positif menurun.  
+- Model 3: DW = 1.2795, autokorelasi positif berkurang, model ini paling mendekati independensi residual.  
+- Model 4: DW = 0.92883, autokorelasi positif tetap ada.  
+
+**Kesimpulan:** Model 3 merupakan pilihan terbaik dari sisi autokorelasi residual.
+
+
+### Uji Heterogenitas
+```{r}
+bptest(cons_lm1)
+bptest(cons_lm2)
+bptest(cons_lm3)
+bptest(cons_lm4)
+```
+
+Berdasarkan hasil uji Breusch-Pagan:  
+
+- **Model 1:** BP = 1.9113, p-value = 0.3846 (> 0.05), tidak terdapat heteroskedastisitas.  
+- **Model 2:** BP = 1.1786, p-value = 0.5547 (> 0.05), tidak terdapat heteroskedastisitas.  
+- **Model 3:** BP = 1.444, p-value = 0.6953 (> 0.05), tidak terdapat heteroskedastisitas.  
+- **Model 4:** BP = 8.4529, p-value = 0.03752 (< 0.05), terdapat **heteroskedastisitas**, artinya variansi residual tidak konstan.  
+
+**Kesimpulan:** Model 1, 2, dan 3 bebas dari heteroskedastisitas, sedangkan Model 4 perlu diperbaiki atau di-transformasi untuk mengatasi masalah variansi residual yang tidak konstan.
+
+
+### Uji Normalitas
+```{r}
+shapiro.test(residuals(cons_lm1))
+shapiro.test(residuals(cons_lm2))
+shapiro.test(residuals(cons_lm3))
+shapiro.test(residuals(cons_lm4))
+```
+
+Berdasarkan hasil uji Shapiro-Wilk terhadap residual:  
+
+- **Model 1:** W = 0.93137, p-value = 0.1467 (> 0.05), residual berdistribusi normal.  
+- **Model 2:** W = 0.97527, p-value = 0.8444 (> 0.05), residual berdistribusi normal.  
+- **Model 3:** W = 0.96792, p-value = 0.6868 (> 0.05), residual berdistribusi normal.  
+- **Model 4:** W = 0.96289, p-value = 0.6031 (> 0.05), residual berdistribusi normal.  
+
+**Kesimpulan:** Semua model memiliki residual yang berdistribusi normal, sehingga asumsi normalitas terpenuhi.
+
+
+## Perbandingan Model
+```{r}
+# Perbandingan Model berdasarkan MAPE
+ akurasi <- matrix(c(mape.koyck, mape.dlm, mape.dlm2, mape.ardl))
+ row.names(akurasi) <- c("Koyck", "DLM 1", "DLM 2", "Autoregressive")
+ colnames(akurasi) <- c("MAPE")
+ akurasi
+```
+**Kesimpulan:** Model dengan nilai MAPE terendah menunjukkan akurasi prediksi terbaik. Dari hasil ini, dapat dilihat model yang paling sesuai untuk data AQI dan SO2 adalah model yang memiliki MAPE terkecil.
+
+## PLOT
+```{r} 
+# Ambil 5 periode terakhir dari data aktual
+x_plot <- tail(test$SO2, 5)
+y_actual <- tail(test$AQI, 5)
+
+# Ambil 5 periode terakhir dari masing-masing forecast
+koyck_fore <- tail(as.numeric(fore.koyck$forecasts), 5)
+dlm1_fore  <- tail(as.numeric(fore.dlm$forecasts), 5)
+dlm2_fore  <- tail(as.numeric(fore.dlm2$forecasts), 5)
+ardl_fore  <- tail(as.numeric(fore.ardl), 5)
+
+# Plot
+plot(x_plot, y_actual, type="b", col="black",
+     ylim=range(c(y_actual, koyck_fore, dlm1_fore, dlm2_fore, ardl_fore)),
+     xlab="SO2", ylab="AQI", main="Perbandingan Data Aktual dan Prediksi Model")
+
+points(x_plot, koyck_fore, col="red");   lines(x_plot, koyck_fore, col="red")
+points(x_plot, dlm1_fore, col="blue");   lines(x_plot, dlm1_fore, col="blue")
+points(x_plot, dlm2_fore, col="orange"); lines(x_plot, dlm2_fore, col="orange")
+points(x_plot, ardl_fore, col="green");  lines(x_plot, ardl_fore, col="green")
+
+legend("topleft",
+       legend=c("Aktual", "Koyck","DLM 1","DLM 2", "Autoregressive"),
+       lty=1, col=c("black","red","blue","orange","green"), cex=0.8)
+
+```
+
+## Kesimpulan Akhir: Perbandingan Model
+
+Dari grafik perbandingan antara data aktual (AQI) dan prediksi model:
+
+- **DLM 1 (biru)** memberikan prediksi yang paling dekat dengan data aktual dibandingkan model lainnya. Hal ini juga konsisten dengan nilai **MAPE terendah (0.0211)**, menunjukkan akurasi terbaik.
+
+- **Koyck (merah)** dan **DLM 2 (oranye)** memiliki deviasi lebih besar dari data aktual, meskipun masih mengikuti tren menurun secara umum.
+
+- **Autoregressive (hijau)** menampilkan perbedaan paling signifikan dengan data aktual, yang konsisten dengan **MAPE tinggi (3.5878)**, menunjukkan model kurang cocok.
+
+**Kesimpulan:** Model **DLM 1** adalah model terbaik untuk memprediksi AQI berdasarkan SO2 pada dataset ini. Model lain dapat digunakan sebagai alternatif, namun akurasi dan kesesuaian model lebih rendah.
