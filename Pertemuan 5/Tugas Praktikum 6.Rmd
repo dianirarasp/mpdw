@@ -1,0 +1,114 @@
+---
+title: "Tugas Praktikum 5 (Cek Kestasioneran dan Penanganan"
+author: "DIANI RARAS PUSPITA"
+date: "2025-10-02"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+set.seed(8990)
+```
+
+## Masukan Data
+
+```{r}
+data <- data.frame(
+  waktu = 376:500,
+  nilai = c(14367,14454,14506,14495,14666,
+            14672,14521,14432,14609,14839,
+            14817,14975,14977,14996,14974,
+            14778,14945,14636,14837,14826,
+            14867,14824,14994,15089,15303,
+            15285,15462,15522,15549,15610,
+            15474,15629,15675,15362,15582,
+            15616,15566,15509,15602,15115,
+            15056,14970,15079,15182,15159,
+            15258,15255,15473,15369,15165,
+            14969,14934,14783,14929,14666,
+            14668,14843,14929,15008,14875,
+            14886,14954,15043,15036,15158,
+            14996,15041,15095,15139,15324,
+            15314,15291,15194,15379,15360,
+            15346,15487,15636,15696,15864,
+            15904,15582,15683,15399,15447,
+            15399,15560,15283,15409,15383,
+            15478,15503,15601,15768,15727,
+            15598,15629,15586,15692,15536,
+            15639,15803,15873,15883,16112,
+            16210,16232,15951,16047,15920,
+            16038,16244,16268,16480,16470,
+            16343,16239,16067,16208,16284,
+            16135,15934,15672,15484,15649)
+)
+
+head(data)
+
+```
+
+```{r}
+ggplot(data, aes(x=waktu, y=nilai)) +
+  geom_line(color="blue") +
+  geom_point(color="darkred") +
+  labs(title="Plot Data Time Series Asli",
+       x="Waktu", y="Nilai")
+
+```
+
+
+## Cek Stasioneritas
+### Plot ACF dan PACF
+
+```{r}
+acf(data$nilai, main="ACF Data Asli")
+pacf(data$nilai, main="PACF Data Asli")
+
+```
+
+
+
+Dari hasil plot ACF dan PACF pada data asli, terlihat bahwa nilai **ACF menurun secara perlahan (decay lambat)** dan tidak langsung putus pada lag awal. Hal ini mengindikasikan bahwa data memiliki tren dan **belum stasioner dalam rataan (mean)**.  
+
+PACF menunjukkan spike signifikan pada lag 1 dan menurun setelahnya. Pola seperti ini juga mendukung kesimpulan bahwa **data masih mengandung komponen non-stasioner**.  
+
+Dengan demikian, diperlukan proses **differencing** untuk membuat data menjadi stasioner sebelum dilakukan pemodelan lebih lanjut.
+
+
+### Uji Augmented Dickey-Fuller (ADF)
+
+```{r}
+adf.test(data$nilai)
+```
+Nilai p-value diperoleh 0.3662, maka p-value > 0.05 → *Data tidak stasioner.*
+
+**Data asli** menunjukkan pola tren, ACF yang turun lambat, serta hasil uji ADF dengan p-value > 0.05. Hal ini mengindikasikan bahwa data **belum stasioner dalam rataan** meskipun ragam relatif stabil.
+
+## Penanganan 
+### Differencing Orde 1
+
+```{r}
+diff_data <- diff(data$nilai, differences=1)
+
+plot.ts(diff_data, main="Data Setelah Differencing (d=1)")
+acf(diff_data, main="ACF Setelah Differencing")
+pacf(diff_data, main="PACF Setelah Differencing")
+
+adf.test(diff_data)
+
+```
+### Uji Stasioneritas Setelah Differencing
+
+Setelah dilakukan differencing orde 1, hasil uji menunjukkan bahwa data sudah stasioner:
+
+
+- ACF cepat turun menuju nol, tidak seperti pada data asli.
+- PACF tidak menunjukkan pola yang kuat.
+- Uji Augmented Dickey-Fuller memberikan nilai p-value = 0.01 (< 0.05), sehingga hipotesis nol (data tidak stasioner) ditolak.Hal ini berarti data telah **stasioner dalam rataan**.
+- Plot setelah differencing juga memperlihatkan variabilitas yang relatif konstan, sehingga dapat disimpulkan bahwa data sudah **stasioner dalam rataan dan ragam**.
+
+
+**Kesimpulan:** Data telah stasioner setelah dilakukan differencing orde 1, sehingga dapat digunakan untuk proses pemodelan lebih lanjut (misalnya ARIMA).
+
